@@ -35,21 +35,6 @@ async function getReadeckBookmarks(): Promise<ReadeckArticle[]> {
   return data;
 }
 
-const omnivoreSaveMutation = `
-  mutation SaveUrl($input: SaveUrlInput!) {
-    saveUrl(input: $input) {
-      ... on SaveSuccess {
-        url
-        clientRequestId
-      }
-      ... on SaveError {
-        errorCodes
-        message
-      }
-    }
-  }
-`;
-
 const omnivorePayload = (article: ReadeckArticle) => {
   const clientRequestId = crypto.randomUUID();
   const source = "api";
@@ -62,7 +47,9 @@ const omnivorePayload = (article: ReadeckArticle) => {
   };
 };
 
-async function saveArchivedToOmnivore(bookmark: ReadeckArticle): Promise<void> {
+async function saveArchivedToOmnivore(
+  bookmark: ReadeckArticle
+): Promise<{ url: string }> {
   const response = await fetch(`${Deno.env.get("OMNIVORE_URL")}/api/graphql`, {
     method: "POST",
     headers: {
@@ -70,7 +57,20 @@ async function saveArchivedToOmnivore(bookmark: ReadeckArticle): Promise<void> {
       Authorization: `${Deno.env.get("OMNIVORE_API_KEY")}`,
     },
     body: JSON.stringify({
-      query: omnivoreSaveMutation,
+      query: `
+        mutation SaveUrl($input: SaveUrlInput!) {
+          saveUrl(input: $input) {
+            ... on SaveSuccess {
+              url
+              clientRequestId
+            }
+            ... on SaveError {
+              errorCodes
+              message
+            }
+          }
+        }
+      `,
       variables: omnivorePayload(bookmark),
     }),
   });
@@ -79,42 +79,7 @@ async function saveArchivedToOmnivore(bookmark: ReadeckArticle): Promise<void> {
       cause: await response.text(),
     });
   }
-  const data = await response.json();
-  console.log(data);
-}
-
-async function archiveArticleInOmnivore(linkId: string): Promise<void> {
-  const response = await fetch("https://api-prod.omnivore.app/api/graphql", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `${Deno.env.get("OMNIVORE_API_KEY")}`,
-    },
-    body: JSON.stringify({
-      query: `
-        mutation ArchiveLink($input: ArchiveLinkInput!) {
-          setLinkArchived(input: $input) {
-            ... on ArchiveLinkSuccess {
-              linkId
-              message
-            }
-            ... on ArchiveLinkError {
-              errorCodes
-              message
-            }
-          }
-        }
-      `,
-      variables: { input: { linkId, archived: true } },
-    }),
-  });
-  if (!response.ok) {
-    throw new Error("Failed to archive article in omnivore", {
-      cause: await response.text(),
-    });
-  }
-  const data = await response.json();
-  console.log(data);
+  return { url: bookmark.url };
 }
 
 if (import.meta.main) {
